@@ -1,3 +1,4 @@
+# Import necessary libraries
 import json
 from collections import defaultdict
 from typing import Dict, List, Tuple, Any, Union
@@ -5,14 +6,32 @@ import os
 import pandas as pd
 from datetime import datetime
 
-
 def iterate_json_files(directory: str):
+    """
+    Generator function to iterate over JSON files in a given directory.
+    
+    Args:
+    directory (str): Path to the directory containing JSON files.
+    
+    Yields:
+    tuple: A tuple containing the filename and full file path for each JSON file.
+    """
     for filename in os.listdir(directory):
         if filename.endswith('.json'):
             file_path = os.path.join(directory, filename)
             yield (filename, file_path)
 
 def flatten_json(data: Union[Dict[str, Any], List[Any]], prefix: str = '') -> Dict[str, Any]:
+    """
+    Recursively flatten a nested JSON structure into a flat dictionary.
+    
+    Args:
+    data (Union[Dict[str, Any], List[Any]]): The JSON data to flatten.
+    prefix (str): The current key prefix for nested structures.
+    
+    Returns:
+    Dict[str, Any]: A flattened dictionary representation of the JSON data.
+    """
     flattened = {}
     if isinstance(data, dict):
         for key, value in data.items():
@@ -37,6 +56,20 @@ def flatten_json(data: Union[Dict[str, Any], List[Any]], prefix: str = '') -> Di
     return flattened
 
 def analyze_json_files(directory: str):
+    """
+    Analyze JSON files in the given directory to extract various statistics and structures.
+    
+    Args:
+    directory (str): Path to the directory containing JSON files.
+    
+    Returns:
+    tuple: A tuple containing various analysis results:
+        - field_frequency: Dictionary of field occurrences across all files.
+        - missing_fields: Dictionary of files with their missing fields.
+        - extra_fields: Dictionary of files with their extra fields.
+        - file_structures: Dictionary grouping files by their structure.
+        - file_data: Dictionary containing detailed data for each file group.
+    """
     field_frequency = defaultdict(int)
     missing_fields = defaultdict(list)
     extra_fields = defaultdict(list)
@@ -44,27 +77,30 @@ def analyze_json_files(directory: str):
     file_structures = defaultdict(list)
     file_data = defaultdict(list)
 
+    # Iterate through all JSON files in the directory
     for file_name, file_path in iterate_json_files(directory):
         with open(file_path, 'r') as f:
             data = json.load(f)
         
+        # Flatten the JSON structure
         flattened_data = flatten_json(data)
         fields = set(flattened_data.keys())
         all_fields.update(fields)
         
-        # Field frequency analysis
+        # Count field occurrences
         for field in fields:
             field_frequency[field] += 1
         
-        # Store file structure for grouping
+        # Group files by their structure
         structure_key = tuple(sorted(fields))
         file_structures[structure_key].append(file_name)
         file_data[structure_key].append((file_name, file_path, flattened_data))
 
+    # Calculate total number of files and identify common fields
     total_files = sum(len(files) for files in file_structures.values())
     common_fields = set(field for field, count in field_frequency.items() if count == total_files)
 
-    # Missing and extra field detection
+    # Identify missing and extra fields for each file
     for structure, files in file_structures.items():
         missing = common_fields - set(structure)
         extra = set(structure) - common_fields
@@ -80,22 +116,38 @@ def generate_summary_report(field_frequency: Dict[str, int],
                             missing_fields: Dict[str, List[str]], 
                             extra_fields: Dict[str, List[str]], 
                             file_structures: Dict[Tuple[str], List[str]]) -> str:
+    """
+    Generate a summary report based on the analysis results.
+    
+    Args:
+    field_frequency (Dict[str, int]): Dictionary of field occurrences.
+    missing_fields (Dict[str, List[str]]): Dictionary of files with their missing fields.
+    extra_fields (Dict[str, List[str]]): Dictionary of files with their extra fields.
+    file_structures (Dict[Tuple[str], List[str]]): Dictionary grouping files by their structure.
+    
+    Returns:
+    str: A formatted string containing the summary report.
+    """
     total_files = sum(len(files) for files in file_structures.values())
     report = f"JSON Files Analysis Report\n"
     report += f"Total files analyzed: {total_files}\n\n"
 
+    # Add field frequency information to the report
     report += "Field Frequency:\n"
     for field, count in sorted(field_frequency.items(), key=lambda x: x[1], reverse=True):
         report += f"  {field}: {count} ({count/total_files*100:.2f}%)\n"
 
+    # Add missing fields information to the report
     report += "\nMissing Fields:\n"
     for file, fields in missing_fields.items():
         report += f"  {file}: {', '.join(fields)}\n"
 
+    # Add extra fields information to the report
     report += "\nExtra Fields:\n"
     for file, fields in extra_fields.items():
         report += f"  {file}: {', '.join(fields)}\n"
 
+    # Add file grouping information to the report
     report += "\nFile Grouping:\n"
     for i, (structure, files) in enumerate(file_structures.items(), 1):
         report += f"  Group {i} ({len(files)} files):\n"
@@ -105,6 +157,15 @@ def generate_summary_report(field_frequency: Dict[str, int],
     return report
 
 def create_dataframes(file_data: Dict[Tuple[str], List[Tuple[str, str, Dict]]]) -> Dict[int, pd.DataFrame]:
+    """
+    Create pandas DataFrames for each group of files with the same structure.
+    
+    Args:
+    file_data (Dict[Tuple[str], List[Tuple[str, str, Dict]]]): Dictionary containing detailed data for each file group.
+    
+    Returns:
+    Dict[int, pd.DataFrame]: A dictionary of DataFrames, keyed by group number.
+    """
     dataframes = {}
     for i, (structure, files) in enumerate(file_data.items(), 1):
         df_data = []
@@ -124,9 +185,21 @@ def create_dataframes(file_data: Dict[Tuple[str], List[Tuple[str, str, Dict]]]) 
     return dataframes
 
 def main(directory: str, report_directory: str):
-    field_frequency, missing_fields, extra_fields, file_structures, file_data = analyze_json_files(directory)
-    report = generate_summary_report(field_frequency, missing_fields, extra_fields, file_structures)
+    """
+    Main function to orchestrate the JSON file analysis process.
     
+    Args:
+    directory (str): Path to the directory containing JSON files to analyze.
+    report_directory (str): Path to the directory where reports and DataFrames should be saved.
+    
+    Returns:
+    Dict[int, pd.DataFrame]: A dictionary of DataFrames, keyed by group number.
+    """
+    # Analyze JSON files
+    field_frequency, missing_fields, extra_fields, file_structures, file_data = analyze_json_files(directory)
+    
+    # Generate and print the summary report
+    report = generate_summary_report(field_frequency, missing_fields, extra_fields, file_structures)
     print(report)
 
     # Create the reports directory if it doesn't exist
